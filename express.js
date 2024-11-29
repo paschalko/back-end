@@ -22,6 +22,8 @@ const client = new MongoClient(uri, {
         deprecationErrors: true,
     },
 });
+// Handle PUT request to update lesson availability
+const { ObjectId } = require("mongodb");
 
 // Database variable
 let database;
@@ -66,29 +68,9 @@ app.post("/api/order", async (req, res) => {
         }
 
         const ordersCollection = database.collection("orders");
-        const lessonsCollection = database.collection("lessons");
 
         // Insert the order into the "orders" collection
         const result = await ordersCollection.insertOne(order);
-
-        // Update lesson availability
-        const updatePromises = order.lessons.map(async (lesson) => {
-            const { id, quantity } = lesson;
-            const updatedLesson = await lessonsCollection.findOneAndUpdate(
-                { id }, // Match lesson by ID
-                { $inc: { Available: -quantity } }, // Decrease availability
-                { returnDocument: "after" } // Return the updated document
-            );
-
-            if (!updatedLesson.value || updatedLesson.value.Available < 0) {
-                throw new Error(
-                    `Insufficient availability for lesson with id: ${id}`
-                );
-            }
-        });
-
-        // Wait for all update operations to complete
-        await Promise.all(updatePromises);
 
         res.status(201).json({
             message: "Order placed successfully",
@@ -99,6 +81,41 @@ app.post("/api/order", async (req, res) => {
         res.status(500).json({ error: "Unable to place order" });
     }
 });
+
+
+// Handle PUT request to update lesson availability
+app.put('/api/lessons/:id', async (req, res) => {
+    const { id } = req.params;
+    const { Available } = req.body; // Ensure this matches the request body key
+
+    // Check if the Available value is a valid number
+    if (typeof Available !== 'number' || Available < 0) {
+        return res.status(400).json({ error: 'Invalid available spaces value. Must be a positive number.' });
+    }
+
+    try {
+        const collection = database.collection('lessons'); // Use the global database variable
+
+        // Update the document with the specified id
+        const result = await collection.updateOne(
+            { _id: new ObjectId(id) }, // Assuming 'id' is the MongoDB ObjectId
+            { $set: { Available } } // Match the exact field name
+        );
+
+        if (result.matchedCount === 0) {
+            return res.status(404).json({ error: 'Document not found.' });
+        }
+
+        res.status(200).json({ message: 'Available spaces updated successfully.' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Internal server error.' });
+    }
+});
+
+
+
+
 
 // Handle 404 errors
 app.use((req, res) => {
@@ -112,36 +129,6 @@ function startServer() {
         console.log(`App has started on port ${PORT}`);
     });
 }
-
-app.put("/api/lessons/:id", async (req, res) => {
-    try {
-        const { id } = req.params; // Extract lesson ID from the URL
-        const { quantity } = req.body; // Extract the quantity to update
-
-        if (!id || !quantity) {
-            return res.status(400).json({ error: "Invalid data" });
-        }
-
-        const lessonsCollection = database.collection("lessons");
-        const result = await lessonsCollection.findOneAndUpdate(
-            { id }, // Match lesson by ID
-            { $inc: { Available: -quantity } }, // Decrease availability
-            { returnDocument: "after" } // Return the updated document
-        );
-
-        if (!result.value) {
-            return res.status(404).json({ error: `Lesson with ID ${id} not found` });
-        }
-
-        res.status(200).json({
-            message: "Lesson availability updated successfully",
-            lesson: result.value,
-        });
-    } catch (error) {
-        console.error("Error updating lesson availability:", error.message);
-        res.status(500).json({ error: "Failed to update lesson availability" });
-    }
-});
 
 // Start the database connection
 connectToDatabase();
