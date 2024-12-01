@@ -211,7 +211,7 @@ app.get('/search', async (req, res) => {
 
 // Handle 404 errors
 app.use((req, res) => {
-    res.status(404).send("Resource not f jkdklm;lm;lldbdvgsfrsmakound!!");
+    res.status(404).send("Resource not found!");
 });
 
 // Function to start the serverbb
