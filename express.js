@@ -211,10 +211,10 @@ app.get('/search', async (req, res) => {
 
 // Handle 404 errors
 app.use((req, res) => {
-    res.status(404).send("Resource not found!!");
+    res.status(404).send("Resource not f jkdklmlmakound!!");
 });
 
-// Function to start the server
+// Function to start the serverbb
 function startServer() {
     const PORT = 3000;
     app.listen(PORT, () => {
