@@ -1,8 +1,9 @@
 const express = require("express");
 const morgan = require("morgan");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
-const path = require("path");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const path = require('path');
+
 
 // Initialize express app
 const app = express();
@@ -11,7 +12,9 @@ const app = express();
 app.use(morgan("short"));
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "public"))); // Serve static files
+app.use(express.static(path.join(__dirname, "Front-end")));
+
+ // Serve static files
 
 // MongoDB URI and Client Setup
 const uri = "mongodb+srv://ibeanukosi:paschal@cluster0.ye24p.mongodb.net/";
@@ -22,8 +25,6 @@ const client = new MongoClient(uri, {
         deprecationErrors: true,
     },
 });
-// Handle PUT request to update lesson availability
-const { ObjectId } = require("mongodb");
 
 // Database variable
 let database;
@@ -40,6 +41,49 @@ async function connectToDatabase() {
         process.exit(1);
     }
 }
+
+// Search route
+app.get('/search', async (req, res) => {
+    try {
+        const { query } = req.query;
+        if (!query) {
+            return res.status(400).json({ message: "Search query is required." });
+        }
+
+        // Create a regex for case-insensitive matching for text fields
+        const regex = new RegExp(query, 'i');  
+
+        // Initialize the search query
+        const searchQuery = {
+            $or: [
+                { subject: { $regex: regex } }, // Case-insensitive search for subject
+                { location: { $regex: regex } } // Case-insensitive search for location
+            ]
+        };
+
+        // Check if the query is a valid number for price or spaces
+        const priceQuery = parseFloat(query);
+        const spacesQuery = parseInt(query);
+
+        if (!isNaN(priceQuery)) {
+            searchQuery.$or.push({ price: priceQuery }); // Match exact price
+        }
+
+        if (!isNaN(spacesQuery)) {
+            searchQuery.$or.push({ spaces: spacesQuery }); // Match exact spaces
+        }
+
+        // Execute the query and retrieve the results
+        const lessonsCollection = database.collection('lessons');
+        const results = await lessonsCollection.find(searchQuery).toArray();
+        
+        res.json(results); // Return the results as JSON
+    } catch (error) {
+        console.error("Error during search:", error);
+        res.status(500).json({ message: "An error occurred during search!" });
+    }
+});
+
 
 // Root route
 app.get("/", (req, res) => {
@@ -58,23 +102,34 @@ app.get("/api/lessons", async (req, res) => {
     }
 });
 
+//me
 // Handle POST request to save a new order and update availability
 app.post("/api/order", async (req, res) => {
     try {
-        const { order } = req.body; // Extract order data from the request body
+        console.log("Received order payload:", req.body);
+
+        const { order } = req.body;
 
         if (!order || !order.lessons || order.lessons.length === 0) {
+            console.log("Invalid order data:", req.body);
             return res.status(400).json({ error: "Invalid order data" });
         }
 
         const ordersCollection = database.collection("orders");
+        const lessonsCollection = database.collection("lessons");
 
-        // Insert the order into the "orders" collection
         const result = await ordersCollection.insertOne(order);
+
+        for (const lesson of order.lessons) {
+            await lessonsCollection.updateOne(
+                { _id: new ObjectId(lesson.id) },
+                { $inc: { Available: -lesson.quantity } }
+            );
+        }
 
         res.status(201).json({
             message: "Order placed successfully",
-            orderId: result.insertedId, // Return the inserted order's ID
+            orderId: result.insertedId,
         });
     } catch (error) {
         console.error("Error placing order:", error.message);
@@ -114,12 +169,49 @@ app.put('/api/lessons/:id', async (req, res) => {
 });
 
 
+app.get('/search', async (req, res) => {
+    try {
+      
+        const { query } = req.query;
+        if (!query) {
+            return res.status(400).json({ message: "Search query is required." });
+        }
 
+        // Case-insensitive search across multiple fields (subject, location, price, spaces)
+        const regex = new RegExp(query, 'i');  // Regular expression for case-insensitive matching
 
+        const searchQuery = {
+            $or: [
+                { subject: { $regex: regex } },
+                { location: { $regex: regex } },
+            ]
+        };
+
+        const priceQuery = parseFloat(query);
+        const spacesQuery = parseInt(query);
+
+        // Search by price or spaces if the query is a number
+        if (!isNaN(priceQuery)) {
+            searchQuery.$or.push({ price: priceQuery });
+        }
+
+        if (!isNaN(spacesQuery)) {
+            searchQuery.$or.push({ Available: spacesQuery });
+        }
+
+        // Execute search query and return the results
+        const lessonsCollection = database.collection('lessons');
+        const results = await lessonsCollection.find(searchQuery).toArray();
+        res.json(results);
+    } catch (error) {
+        console.error("Error during search:", error);
+        res.status(500).json({ message: "An error occurred during search!" });
+    }
+});
 
 // Handle 404 errors
 app.use((req, res) => {
-    res.status(404).send("Resource not found!");
+    res.status(404).send("Resource not found!!");
 });
 
 // Function to start the server
@@ -129,6 +221,7 @@ function startServer() {
         console.log(`App has started on port ${PORT}`);
     });
 }
+
 
 // Start the database connection
 connectToDatabase();

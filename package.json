@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@vue/cli-service": "^5.0.8",
     "cors": "^2.8.5",
     "express": "^4.21.1",
     "mongodb": "^6.11.0",
@@ -11,7 +12,8 @@
   "main": "express.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon express.js"
+    "start": "nodemon express.js",
+    "build": "vue-cli-service build"
   },
   "author": "paschal",
   "license": "ISC",
