@@ -43,6 +43,7 @@ async function connectToDatabase() {
 }
 
 // Search route
+// Search route
 app.get('/search', async (req, res) => {
     try {
         const { query } = req.query;
@@ -50,36 +51,30 @@ app.get('/search', async (req, res) => {
             return res.status(400).json({ message: "Search query is required." });
         }
 
-        // Create a regex for case-insensitive matching for text fields
-        const regex = new RegExp(query, 'i');  
+        // Case-insensitive regex for text fields
+        const regex = new RegExp(query, 'i');
 
-        // Initialize the search query
-        const searchQuery = {
-            $or: [
-                { subject: { $regex: regex } }, // Case-insensitive search for subject
-                { location: { $regex: regex } } // Case-insensitive search for location
-            ]
-        };
-
-        // Check if the query is a valid number for price or spaces
+        // Parse numeric query values
         const priceQuery = parseFloat(query);
         const spacesQuery = parseInt(query);
 
-        if (!isNaN(priceQuery)) {
-            searchQuery.$or.push({ price: priceQuery }); // Match exact price
-        }
+        // Build the search query
+        const searchQuery = {
+            $or: [
+                { subject: { $regex: regex } },   // Match subject
+                { location: { $regex: regex } }, // Match location
+                ...(isNaN(priceQuery) ? [] : [{ price: priceQuery }]), // Match price if valid number
+                ...(isNaN(spacesQuery) ? [] : [{ Available: spacesQuery }]) // Match spaces if valid number
+            ]
+        };
 
-        if (!isNaN(spacesQuery)) {
-            searchQuery.$or.push({ spaces: spacesQuery }); // Match exact spaces
-        }
-
-        // Execute the query and retrieve the results
+        // Fetch data from the database
         const lessonsCollection = database.collection('lessons');
         const results = await lessonsCollection.find(searchQuery).toArray();
-        
-        res.json(results); // Return the results as JSON
+
+        res.status(200).json(results); // Send the results
     } catch (error) {
-        console.error("Error during search:", error);
+        console.error("Error during search:", error.message);
         res.status(500).json({ message: "An error occurred during search!" });
     }
 });
@@ -139,6 +134,7 @@ app.post("/api/order", async (req, res) => {
 
 
 // Handle PUT request to update lesson availability
+// Handle PUT request to update lesson availability
 app.put('/api/lessons/:id', async (req, res) => {
     const { id } = req.params;
     const { Available } = req.body; // Ensure this matches the request body key
@@ -171,37 +167,24 @@ app.put('/api/lessons/:id', async (req, res) => {
 
 app.get('/search', async (req, res) => {
     try {
-      
         const { query } = req.query;
         if (!query) {
             return res.status(400).json({ message: "Search query is required." });
         }
 
-        // Case-insensitive search across multiple fields (subject, location, price, spaces)
-        const regex = new RegExp(query, 'i');  // Regular expression for case-insensitive matching
-
+        const regex = new RegExp(query, 'i'); // Case-insensitive search
         const searchQuery = {
             $or: [
                 { subject: { $regex: regex } },
                 { location: { $regex: regex } },
+                { price: { $regex: regex } },
+                { Available: { $regex: regex } },
             ]
         };
 
-        const priceQuery = parseFloat(query);
-        const spacesQuery = parseInt(query);
-
-        // Search by price or spaces if the query is a number
-        if (!isNaN(priceQuery)) {
-            searchQuery.$or.push({ price: priceQuery });
-        }
-
-        if (!isNaN(spacesQuery)) {
-            searchQuery.$or.push({ Available: spacesQuery });
-        }
-
-        // Execute search query and return the results
         const lessonsCollection = database.collection('lessons');
         const results = await lessonsCollection.find(searchQuery).toArray();
+
         res.json(results);
     } catch (error) {
         console.error("Error during search:", error);
