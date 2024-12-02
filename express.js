@@ -9,7 +9,7 @@ const path = require('path');
 const app = express();
 
 // Middleware
-app.use(morgan("short"));
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "Front-end")));
@@ -28,7 +28,10 @@ const client = new MongoClient(uri, {
 
 // Database variable
 let database;
-
+app.use((req, res, next) => {
+    console.log(`${req.method} request to ${req.url} at ${new Date().toISOString()}`);
+    next();
+  });
 // Connect to the MongoDB database
 async function connectToDatabase() {
     try {
@@ -42,42 +45,7 @@ async function connectToDatabase() {
     }
 }
 
-// Search route
-// Search route
-app.get('/search', async (req, res) => {
-    try {
-        const { query } = req.query;
-        if (!query) {
-            return res.status(400).json({ message: "Search query is required." });
-        }
 
-        // Case-insensitive regex for text fields
-        const regex = new RegExp(query, 'i');
-
-        // Parse numeric query values
-        const priceQuery = parseFloat(query);
-        const spacesQuery = parseInt(query);
-
-        // Build the search query
-        const searchQuery = {
-            $or: [
-                { subject: { $regex: regex } },   // Match subject
-                { location: { $regex: regex } }, // Match location
-                ...(isNaN(priceQuery) ? [] : [{ price: priceQuery }]), // Match price if valid number
-                ...(isNaN(spacesQuery) ? [] : [{ Available: spacesQuery }]) // Match spaces if valid number
-            ]
-        };
-
-        // Fetch data from the database
-        const lessonsCollection = database.collection('lessons');
-        const results = await lessonsCollection.find(searchQuery).toArray();
-
-        res.status(200).json(results); // Send the results
-    } catch (error) {
-        console.error("Error during search:", error.message);
-        res.status(500).json({ message: "An error occurred during search!" });
-    }
-});
 
 
 // Root route
@@ -164,31 +132,33 @@ app.put('/api/lessons/:id', async (req, res) => {
     }
 });
 
-
-app.get('/search', async (req, res) => {
+app.get('/search', async (req, res, next) => {
     try {
         const { query } = req.query;
         if (!query) {
             return res.status(400).json({ message: "Search query is required." });
         }
 
-        const regex = new RegExp(query, 'i'); // Case-insensitive search
+        const regex = new RegExp(query, 'i');
+        const priceQuery = parseFloat(query);
+        const spacesQuery = parseInt(query);
+
         const searchQuery = {
             $or: [
                 { subject: { $regex: regex } },
                 { location: { $regex: regex } },
-                { price: { $regex: regex } },
-                { Available: { $regex: regex } },
+                ...(isNaN(priceQuery) ? [] : [{ price: priceQuery }]),
+                ...(isNaN(spacesQuery) ? [] : [{ Available: spacesQuery }]),
             ]
         };
 
         const lessonsCollection = database.collection('lessons');
         const results = await lessonsCollection.find(searchQuery).toArray();
 
-        res.json(results);
+        res.status(200).json(results);
     } catch (error) {
-        console.error("Error during search:", error);
-        res.status(500).json({ message: "An error occurred during search!" });
+        console.error("Error during search:", error.message);
+        next(error);
     }
 });
 
